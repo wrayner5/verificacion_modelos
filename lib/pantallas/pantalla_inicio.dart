@@ -21,8 +21,9 @@ class PantallaInicio extends StatefulWidget {
 }
 
 class _PantallaInicioState extends State<PantallaInicio> {
+  EstadoVerificacion? _filtroEstado;
+
   Future<void> _abrirFormulario() async {
-    // Espera el resultado que devuelve Navigator.pop del formulario.
     final nueva = await Navigator.push<Verificacion>(
       context,
       MaterialPageRoute(
@@ -50,7 +51,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
     );
   }
 
-  Future<void> _confirmarEliminar(int indice) async {
+  Future<void> _confirmarEliminar(int indiceOriginal) async {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -69,14 +70,27 @@ class _PantallaInicioState extends State<PantallaInicio> {
       ),
     );
 
-    if (confirmar == true) {
-      setState(() => widget.repositorio.eliminar(indice));
+    if (confirmar == true && mounted) {
+      setState(() {
+        widget.repositorio.eliminar(indiceOriginal);
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final verificaciones = widget.repositorio.todas;
+    final todas = widget.repositorio.todas;
+
+    // Guardamos los índices originales para eliminar el registro correcto
+    // incluso cuando la lista está filtrada.
+    final indicesVisibles = <int>[];
+
+    for (var i = 0; i < todas.length; i++) {
+      if (_filtroEstado == null ||
+          todas[i].estado == _filtroEstado) {
+        indicesVisibles.add(i);
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -90,59 +104,94 @@ class _PantallaInicioState extends State<PantallaInicio> {
               children: [
                 Expanded(
                   child: Text(
-                    'Verificaciones registradas: '
-                    '${verificaciones.length}',
+                    'Verificaciones registradas: ${todas.length}',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
                 ElevatedButton.icon(
-                  // Con null el botón queda deshabilitado.
-                  onPressed: verificaciones.isEmpty
-                      ? null
-                      : _abrirReporte,
+                  onPressed: todas.isEmpty ? null : _abrirReporte,
                   icon: const Icon(Icons.assessment),
                   label: const Text('Generar reporte'),
                 ),
               ],
             ),
           ),
+
+          // Mejora propia solicitada en la Parte 2 del instructivo:
+          // filtrar las verificaciones por estado.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: DropdownButtonFormField<EstadoVerificacion?>(
+              initialValue: _filtroEstado,
+              decoration: const InputDecoration(
+                labelText: 'Filtrar por estado',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                const DropdownMenuItem<EstadoVerificacion?>(
+                  value: null,
+                  child: Text('Todos los estados'),
+                ),
+                ...EstadoVerificacion.values.map(
+                  (estado) => DropdownMenuItem<EstadoVerificacion?>(
+                    value: estado,
+                    child: Text(estado.texto),
+                  ),
+                ),
+              ],
+              onChanged: (estado) {
+                setState(() => _filtroEstado = estado);
+              },
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
           Expanded(
-            child: verificaciones.isEmpty
+            child: todas.isEmpty
                 ? const Center(
                     child: Text('Aún no hay verificaciones.'),
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 88),
-                    itemCount: verificaciones.length,
-                    itemBuilder: (context, i) {
-                      final v = verificaciones[i];
+                : indicesVisibles.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No hay verificaciones para este estado.',
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 88),
+                        itemCount: indicesVisibles.length,
+                        itemBuilder: (context, i) {
+                          final indiceOriginal = indicesVisibles[i];
+                          final v = todas[indiceOriginal];
 
-                      return Card(
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        child: ListTile(
-                          leading: Icon(
-                            iconoEstado(v.estado),
-                            color: colorEstado(v.estado),
-                          ),
-                          title: Text(v.modelo),
-                          subtitle: Text(
-                            '${v.porcentaje.toStringAsFixed(0)} % · '
-                            '${v.estado.texto}\n'
-                            'Verificó: ${v.verificador}',
-                          ),
-                          isThreeLine: true,
-                          trailing: IconButton(
-                            tooltip: 'Eliminar',
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => _confirmarEliminar(i),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                          return Card(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            child: ListTile(
+                              leading: Icon(
+                                iconoEstado(v.estado),
+                                color: colorEstado(v.estado),
+                              ),
+                              title: Text(v.modelo),
+                              subtitle: Text(
+                                '${v.porcentaje.toStringAsFixed(0)} % · '
+                                '${v.estado.texto}\n'
+                                'Verificó: ${v.verificador}',
+                              ),
+                              isThreeLine: true,
+                              trailing: IconButton(
+                                tooltip: 'Eliminar',
+                                icon: const Icon(Icons.delete_outline),
+                                onPressed: () =>
+                                    _confirmarEliminar(indiceOriginal),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
           ),
         ],
       ),
@@ -154,4 +203,3 @@ class _PantallaInicioState extends State<PantallaInicio> {
     );
   }
 }
-
